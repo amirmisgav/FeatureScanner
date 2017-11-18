@@ -1,0 +1,179 @@
+#!groovy​
+package product.PRODUCT2
+
+import com.cloudbees.groovy.cps.NonCPS
+import groovy.transform.Field
+
+node('master'){
+    env.WORKSPACE =  pwd()
+}
+
+println  'WORKSPACE ' + env.WORKSPACE
+
+@Field COMPONENTS = []
+@Field PRODUCT = ''
+@Field PATCH = ''
+@Field PATCH_DIR = ''
+
+println env.JOB_NAME
+def jobFullName =  env.JOB_NAME
+
+String jobName = jobFullName.tokenize('/').last()
+
+PRODUCT = jobName.substring(0,jobName.indexOf(".pipeline."))
+PATCH = jobName.substring(jobName.indexOf(".pipeline.")+10)
+PATCH_DIR = jobFullName.substring(0, jobFullName.lastIndexOf('/'))
+
+println "Job Full Name: " + jobFullName
+println "Job Name: " + jobName
+println "PRODUCT : " + PRODUCT
+println "PATCH : " + PATCH
+println "PATCH_DIR : " + PATCH_DIR
+
+
+//env.maven_repo_local = '/workspace/workspace/.'+PATCH+'_repo'
+
+@NonCPS
+def getJobName(String full_job_name){
+    try{
+        def hi = hudson.model.Hudson.instance
+        def job = hi.getItemByFullName(full_job_name);
+        return job.name
+    }catch(NullPointerException npe){
+        return null
+    }
+    return job.name
+}
+
+@NonCPS
+def readProductFile(def propertyFile){
+    //This will read the data in blocks (with blank lines separating the blocks)
+
+    def productList = []
+
+    File productFile = new File( propertyFile )
+
+    if( !productFile.exists() ) {
+        println "File does not exist"
+    } else {
+        def productRepos = [:]
+        // Step through each line in the file
+        productFile.eachLine { line ->
+            // If the line isn't blank
+            if( line.trim() ) {
+                // Split into a key and value
+                //def (key, value) = line.split(' ').collect { line }
+                def key = line.split(' ')[0]
+                def value = line.split(' ')[1]
+                // and store them in the productRepos Map
+                productRepos."$key" = value
+            }
+        }
+//        // when we've finished the file, store any remaining data
+        if( productRepos ) {
+            productList << productRepos
+        }
+    }
+    return productList
+}
+println env.WORKSPACE
+
+@NonCPS
+def loadComponents(){
+    def productsFile = env.WORKSPACE + "@script/config/patches_maven.properties"
+    println env.WORKSPACE
+    println "productFIle is" + productsFile
+
+//    def productsFile = './config/products_maven.properties'
+    //  println "productsFIle is" + productsFile
+    def productList = readProductFile(productsFile)
+// parse relative repositories(component of the build from products_maven.properties) and load to list COMPONENTS
+    productList.eachWithIndex { it, index ->
+        it.each { k, v ->
+            if (PRODUCT == "${k}") {
+                println "PRODUCT : " + PRODUCT
+                def reponame = v.tokenize(',')
+                reponame.each {
+                    println "REPONAME(Component) is " + it
+                    COMPONENTS.add(it)
+                }
+            }
+        }
+    }
+}
+
+
+loadComponents()
+
+node('LABEL_' + PRODUCT ) {
+
+    stage("Check OUT") {
+        for (int i = 0; i < COMPONENTS.size(); i++) {
+            println "repo " + COMPONENTS[i]
+            def repoFilter = ~/.*?\//
+            def component = COMPONENTS[i].replaceAll(repoFilter, '')
+            println 'checkout component : ' + component
+            //    def job_full_name = 'Features/'+PRODUCT+'/'+PATCH+'/'+component+'_'+PATCH
+            //def job_full_name = PRODUCT + '/Features/' + PATCH + '/' + component + '_' + PATCH
+            def job_full_name = PATCH_DIR + '/' + component + '_' + PATCH
+
+            println "job_full_name " + job_full_name
+            if (getJobName(job_full_name) == (component + '_' + PATCH)) {
+
+                checkout(
+                        [$class                           : 'GitSCM',
+                         branches                         : [
+                                 [name: '*/' + PATCH]
+                         ],
+                         doGenerateSubmoduleConfigurations: false,
+                         extensions                       : [],
+                         gitTool                          : 'Git_1.7_x64',
+                         submoduleCfg                     : [],
+                         userRemoteConfigs                : [
+                                 [PRODUCT1dentialsId: '507925bc-814c-420e-a35f-aca0d3e3db48', url: 'git@GITHUB_HOST:'+ COMPONENTS[i] +'.git']
+                         ]
+                        ]
+                )
+            }
+        }
+    }
+
+
+    def branches = [:]
+    for (int i = 0; i < COMPONENTS.size(); i++) {
+        println "repo " + COMPONENTS[i]
+        def repoFilter = ~/.*?\//
+        def component = COMPONENTS[i].replaceAll(repoFilter, '')
+        println 'component : ' + component
+        //    def job_full_name = 'Features/'+PRODUCT+'/'+PATCH+'/'+component+'_'+PATCH
+        def job_full_name = PATCH_DIR + '/' + component + '_' + PATCH
+        println "job_full_name " + job_full_name
+        println "getJobName(job_full_name)" + getJobName(job_full_name)
+        if (getJobName(job_full_name) == (component + '_' + PATCH)) {
+            def phaseName = 'phase' + component + ':'
+            branches["branch${i}"] = {
+                stage("SS") {
+                    build job_full_name
+                }
+            }
+        }else {
+            println "job_full_name " + job_full_name + "does not exist"
+        }
+
+        job_full_name_rc = PATCH_DIR + '/' + component + '_' + PATCH + '_RC'
+        println "job_full_name_rc " + job_full_name_rc
+        if (getJobName(job_full_name_rc) == (component + '_' + PATCH + '_RC')) {
+            phaseName = 'phase' + component + ':'
+            branches["branch${i+1}"] = {
+                stage("RC") {
+                    build job_full_name_rc
+                }
+            }
+        }
+        else {
+            println "job_full_name_rc " + job_full_name_rc + "does not exist"
+        }
+    }
+    parallel branches
+
+}

@@ -1,0 +1,65 @@
+
+node('LABEL_PRODUCT4') {
+
+    tool name: 'jdk1.8_111_linux', type: 'jdk'
+
+    properties(
+            [
+                    buildDiscarder(
+                            logRotator(artifactDaysToKeepStr: '', artifactNumToKeepStr: '', daysToKeepStr: '', numToKeepStr: '10')
+                    ),
+                    [$class: 'RebuildSettings', autoRebuild: false, rebuildDisabled: false],
+                    [$class: 'JobRestrictionProperty'],
+                    pipelineTriggers([
+                            [$class: "SCMTrigger", scmpoll_spec: "H/5 * * * *"],
+                    ])
+            ]
+    )
+
+    stage("Check OUT") {
+        checkout(
+                [$class                           : 'GitSCM',
+                 branches                         : [
+                         [name: 'master']
+                 ],
+                 doGenerateSubmoduleConfigurations: false,
+                 extensions                       : [],
+                 gitTool                          : 'Git_1.7_x64',
+                 submoduleCfg                     : [],
+                 userRemoteConfigs                : [
+                         [PRODUCT1dentialsId: '507925bc-814c-420e-a35f-aca0d3e3db48', url: 'git@GITHUB_HOST:ORG/TestNG-Parallel.git']
+                 ]
+                ]
+        )
+    }
+
+
+
+    stage('build') {
+        // def mvnHome = tool 'mvn_3.3.9'
+        // sh "${mvnHome}/bin/mvn -B clean install"
+
+        //     withMaven(
+        //       maven:"mvn_3.3.9",
+        //         options: [
+        //               findbugsPublisher(disabled: true),
+        //               artifactsPublisher(disabled: true),
+        //               junitPublisher(disabled: true),
+        //               openTasksPublisher(disabled: true)
+        //           ]) {
+
+        //             sh "mvn clean install"
+        //           }
+
+        // }
+
+        withMaven(jdk: 'jdk1.8_111_linux', maven: 'mvn_3.3.9', mavenLocalRepo: '$WORKSPACE/.repository', mavenOpts: '', mavenSettingsConfig: 'cfcb170c-3868-45d7-a30a-99e55747e56b', mavenSettingsFilePath: '') {
+            sh "mvn clean install"
+        }
+
+
+    }
+
+}
+
+

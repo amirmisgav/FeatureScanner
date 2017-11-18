@@ -1,0 +1,162 @@
+#!groovy​
+import com.cloudbees.groovy.cps.NonCPS
+import groovy.transform.Field
+
+
+
+node('master'){
+    env.WORKSPACE =  pwd()
+}
+
+println  'WORKSPACE ' + env.WORKSPACE
+
+@Field COMPONENTS = []
+@Field PRODUCT = ''
+@Field FEATURE = ''
+@Field FEATURE_DIR = ''
+
+println env.JOB_NAME
+def jobFullName =  env.JOB_NAME
+
+String jobName = jobFullName.tokenize('/').last()
+
+PRODUCT = jobName.substring(0,jobName.indexOf(".pipeline."))
+FEATURE = jobName.substring(jobName.indexOf(".pipeline.")+10)
+FEATURE_DIR = jobFullName.substring(0, jobFullName.lastIndexOf('/'))
+
+println "Job Full Name: " + jobFullName
+println "Job Name: " + jobName
+println "PRODUCT : " + PRODUCT
+println "PATCH : " + FEATURE
+println "PATCH_DIR : " + FEATURE_DIR
+
+
+//env.maven_repo_local = '/workspace/workspace/.'+PATCH+'_repo'
+
+@NonCPS
+def getJobName(String full_job_name){
+    try{
+        def hi = hudson.model.Hudson.instance
+        def job = hi.getItemByFullName(full_job_name);
+        return job.name
+    }catch(NullPointerException npe){
+        return null
+    }
+    return job.name
+}
+
+@NonCPS
+def readProductFile(def propertyFile){
+    //This will read the data in blocks (with blank lines separating the blocks)
+
+    def productList = []
+
+    File productFile = new File( propertyFile )
+
+    if( !productFile.exists() ) {
+        println "File does not exist"
+    } else {
+        def productRepos = [:]
+        // Step through each line in the file
+        productFile.eachLine { line ->
+            // If the line isn't blank
+            if( line.trim() ) {
+                // Split into a key and value
+                //def (key, value) = line.split(' ').collect { line }
+                def key = line.split(' ')[0]
+                def value = line.split(' ')[1]
+                // and store them in the productRepos Map
+                productRepos."$key" = value
+            }
+        }
+//        // when we've finished the file, store any remaining data
+        if( productRepos ) {
+            productList << productRepos
+        }
+    }
+    return productList
+}
+println env.WORKSPACE
+
+@NonCPS
+def loadComponents(){
+    def productsFile = env.WORKSPACE + "@script/config/products_maven.properties"
+    println env.WORKSPACE
+    println "productFIle is" + productsFile
+
+//    def productsFile = './config/products_maven.properties'
+    //  println "productsFIle is" + productsFile
+    def productList = readProductFile(productsFile)
+// parse relative repositories(component of the build from products_maven.properties) and load to list COMPONENTS
+    productList.eachWithIndex { it, index ->
+        it.each { k, v ->
+            if (PRODUCT == "${k}") {
+                println "PRODUCT : " + PRODUCT
+                def reponame = v.tokenize(',')
+                reponame.each {
+                    println "REPONAME(Component) is " + it
+                    COMPONENTS.add(it)
+                }
+            }
+        }
+    }
+}
+
+
+loadComponents()
+
+node('LABEL_' + PRODUCT ) {
+
+    stage("Check OUT") {
+        for (int i = 0; i < COMPONENTS.size(); i++) {
+            println "repo " + COMPONENTS[i]
+            def repoFilter = ~/.*?\//
+            def component = COMPONENTS[i].replaceAll(repoFilter, '')
+            println 'checkout component : ' + component
+            //    def job_full_name = 'Features/'+PRODUCT+'/'+PATCH+'/'+component+'_'+PATCH
+            //def job_full_name = PRODUCT + '/Features/' + PATCH + '/' + component + '_' + PATCH
+            def job_full_name = FEATURE_DIR + '/' + component + '_' + FEATURE
+
+            println "job_full_name " + job_full_name
+            if (getJobName(job_full_name) == (component + '_' + FEATURE)) {
+
+                checkout(
+                        [$class                           : 'GitSCM',
+                         branches                         : [
+                                 [name: '*/' + FEATURE]
+                         ],
+                         doGenerateSubmoduleConfigurations: false,
+                         extensions                       : [],
+                         gitTool                          : 'Git_1.7_x64',
+                         submoduleCfg                     : [],
+                         userRemoteConfigs                : [
+                                 [PRODUCT1dentialsId: '507925bc-814c-420e-a35f-aca0d3e3db48', url: 'git@GITHUB_HOST:'+ COMPONENTS[i] +'.git']
+                         ]
+                        ]
+                )
+            }
+        }
+    }
+
+
+//    stage('Clean') { // for display purposes
+//        sh '/bin/rm -rf  ${maven_repo_local} ;mkdir -p ${maven_repo_local}'
+//    }
+
+    for (int i = 0; i < COMPONENTS.size(); i++) {
+        println "repo " + COMPONENTS[i]
+        def repoFilter = ~/.*?\//
+        def component = COMPONENTS[i].replaceAll(repoFilter, '')
+        println 'component : ' + component
+        //    def job_full_name = 'Features/'+PRODUCT+'/'+PATCH+'/'+component+'_'+PATCH
+        def job_full_name = FEATURE_DIR + '/' + component + '_' + FEATURE
+        println "job_full_name " + job_full_name
+        if (getJobName(job_full_name) == (component + '_' + FEATURE)) {
+            stage(component) {
+                build job_full_name
+            }
+        } else {
+            println "job_full_name " + job_full_name + "does not exist"
+        }
+    }
+}
