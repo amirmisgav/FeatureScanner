@@ -23,14 +23,21 @@ This tool scans only branches with certain prefix. Default prefix is "ftr-" and 
     **Note** that a lot of the dsl closures were encapsulated inside template methods in *src/generators/templates/MavenJobTemplates.groovy* and in */src/generators/templates/ProjectTemplates.groovy*.
 5.  Create Jenkins project that will function as a Job Generator: Checkout this project and runs dsl script: *src/generators/FeatureGenerator.groovy* or */src/generators/PatchGenerator.groovy* according your needs. In addition this job will run also in another step groovy: src/artifactory/ArtifactoryManager.groovy. This job should be schedule to run every a few minutes. Watch attched screenshots.<br>
 
+<br>
 
+###### FILTER
+![](images/filter.png?raw=true)
 <br>
-![Filter](images/filter.png?raw=true)
-<br>
+
+###### GIT URL
 ![Git Url](images/repository_url.png?raw=true)
 <br>
+
+###### SCHEDULER
 ![Scheduler](images/scheduler.png?raw=true)
 <br>
+
+###### PROCCESS DSL
 ![Proccess Job DSL](images/Proccess_job_DSL.png?raw=true)
-<br>
+
 
