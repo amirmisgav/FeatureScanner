@@ -24,4 +24,6 @@ This tool scans only branches with certain prefix. Default prefix is "ftr-" and 
 5.  Create Jenkins project that will function as a Job Generator: Checkout this project and runs dsl script: *src/generators/FeatureGenerator.groovy* or */src/generators/PatchGenerator.groovy* according your needs. In addition this job will run also in another step groovy: src/artifactory/ArtifactoryManager.groovy. This job should be schedule to run every a few minutes. Watch attched screenshots.<br>
 
 
+Filter screenshot:
+![](images/filter.png?raw=true)
 
